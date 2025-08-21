@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <title>Viewer + Object Detection</title>
+    <style>
+      body {
+        font-family: system-ui, sans-serif;
+        margin: 0;
+        display: grid;
+        grid-template-columns: 1fr 320px;
+        height: 100vh;
+      }
+      .stage {
+        position: relative;
+        background: #111;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      video {
+        max-width: 100%;
+        max-height: 100%;
+      }
+      canvas#overlay {
+        position: absolute;
+        /* inset: 0; */
+      }
+      aside {
+        border-left: 1px solid #eee;
+        padding: 12px;
+        overflow: auto;
+      }
+      .stat {
+        font-size: 13px;
+        margin-bottom: 8px;
+      }
+      .label {
+        background: rgba(0, 0, 0, 0.7);
+        color: #fff;
+        padding: 2px 6px;
+        border-radius: 6px;
+        font-size: 12px;
+      }
+      .row {
+        display: flex;
+        gap: 8px;
+        align-items: center;
+        margin: 8px 0;
+      }
+      input[type="range"] {
+        width: 100%;
+      }
+      pre {
+        background: #f7f7f7;
+        padding: 8px;
+        border-radius: 8px;
+        font-size: 12px;
+        white-space: pre-wrap;
+      }
+      button {
+        cursor: pointer;
+        padding: 6px 10px;
+        border-radius: 8px;
+        border: 1px solid #ddd;
+        background: #fafafa;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="stage">
+      <video id="remoteVideo" autoplay playsinline muted></video>
+      <canvas id="overlay"></canvas>
+    </div>
+    <aside>
+      <div class="stat">
+        <strong>Status:</strong> <span id="status">Waiting for stream…</span>
+      </div>
+      <div class="stat"><strong>FPS:</strong> <span id="fps">—</span></div>
+      <div class="row">
+        <label for="th">Score threshold</label>
+        <input id="th" type="range" min="0" max="100" value="50" />
+        <span id="thv">0.50</span>
+      </div>
+      <div class="row">
+        <button id="fit">Fit to video</button>
+        <button id="toggleBoxes">Toggle boxes</button>
+      </div>
+      <h3>Detections</h3>
+      <pre id="out">[]</pre>
+    </aside>
+
+    <!-- Load TF.js + COCO-SSD (browser-only, no build needed) -->
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.20.0/dist/tf.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.2/dist/coco-ssd.min.js"></script>
+
+    <script>
+      // --- WebSocket signaling (same as before) ---
+      const protocol = location.protocol === "https:" ? "wss://" : "ws://";
+      const ws = new WebSocket(protocol + location.host);
+
+      const pc = new RTCPeerConnection({
+        iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
+      });
+
+      // Make sure receiver expects tracks
+      pc.addTransceiver("video", { direction: "recvonly" });
+      pc.addTransceiver("audio", { direction: "recvonly" });
+
+      const video = document.getElementById("remoteVideo");
+      const canvas = document.getElementById("overlay");
+      const ctx = canvas.getContext("2d");
+      const statusEl = document.getElementById("status");
+      const fpsEl = document.getElementById("fps");
+      const outEl = document.getElementById("out");
+      const thInput = document.getElementById("th");
+      const thVal = document.getElementById("thv");
+      const fitBtn = document.getElementById("fit");
+      const toggleBtn = document.getElementById("toggleBoxes");
+
+      let model = null;
+      let showBoxes = true;
+      let lastFrameTs = performance.now();
+      let fps = 0;
+
+      // Reflect threshold UI
+      function threshold() {
+        return Number(thInput.value) / 100;
+      }
+      thInput.addEventListener("input", () => {
+        thVal.textContent = threshold().toFixed(2);
+      });
+
+      // Resize canvas to match the rendered video size
+      function resizeCanvasToVideo() {
+        const rect = video.getBoundingClientRect();
+        const newWidth = Math.round(rect.width);
+        const newHeight = Math.round(rect.height);
+
+        // Only update if size has changed to avoid unnecessary resets
+        if (canvas.width !== newWidth || canvas.height !== newHeight) {
+          canvas.width = newWidth;
+          canvas.height = newHeight;
+          console.log(`Canvas resized to ${canvas.width}x${canvas.height}`);
+        }
+      }
+
+      fitBtn.addEventListener("click", resizeCanvasToVideo);
+      toggleBtn.addEventListener("click", () => {
+        showBoxes = !showBoxes;
+      });
+
+      pc.ontrack = async (event) => {
+        statusEl.textContent = "Stream received. Starting model…";
+        video.srcObject = event.streams[0];
+        video.muted = true;
+        try {
+          await video.play();
+        } catch (e) {
+          console.warn("Autoplay prevented, click anywhere:", e);
+        }
+
+        // Wait for metadata to size canvas correctly
+        if (video.readyState < 2) {
+          await new Promise((res) => (video.onloadedmetadata = res));
+        }
+        resizeCanvasToVideo();
+
+        // Lazy-load model once we actually have a stream
+        model = await cocoSsd.load({ base: "lite_mobilenet_v2" }); // fast & decent
+        statusEl.textContent = "Model loaded. Detecting…";
+        detectLoop();
+      };
+
+      pc.onicecandidate = ({ candidate }) => {
+        if (candidate) ws.send(JSON.stringify({ target: "phone", candidate }));
+      };
+
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ type: "viewer" }));
+      };
+
+      ws.onmessage = async ({ data }) => {
+        const msg = JSON.parse(data);
+        if (msg.offer) {
+          await pc.setRemoteDescription(new RTCSessionDescription(msg.offer));
+          const answer = await pc.createAnswer();
+          await pc.setLocalDescription(answer);
+          ws.send(JSON.stringify({ target: "phone", answer }));
+          statusEl.textContent = "Offer received; answer sent.";
+        }
+        if (msg.candidate) {
+          await pc.addIceCandidate(new RTCIceCandidate(msg.candidate));
+        }
+      };
+
+      // --- Detection loop ---
+      async function detectLoop() {
+        if (!model || video.readyState < 2) {
+          requestAnimationFrame(detectLoop);
+          return;
+        }
+
+        // Run detection (returns array of {bbox:[x,y,w,h], class, score})
+        const predictions = await model.detect(video, 20); // up to 20 boxes
+
+        // Filter by threshold
+        const th = threshold();
+        const filtered = predictions.filter((p) => p.score >= th);
+
+        // Draw overlay
+        drawDetections(filtered);
+
+        // Show JSON (class, score, bbox)
+        outEl.textContent = JSON.stringify(
+          filtered.map(({ class: c, score, bbox }) => ({
+            class: c,
+            score: Number(score.toFixed(3)),
+            bbox,
+          })),
+          null,
+          2
+        );
+
+        // FPS
+        const now = performance.now();
+        const dt = now - lastFrameTs;
+        lastFrameTs = now;
+        fps = 1000 / dt;
+        fpsEl.textContent = fps.toFixed(1);
+
+        // Next frame
+        requestAnimationFrame(detectLoop);
+      }
+
+      function drawDetections(dets) {
+        if (!showBoxes) {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          return;
+        }
+
+        // Scale factor if displayed size differs from intrinsic size
+        const vw = video.videoWidth || canvas.width;
+        const vh = video.videoHeight || canvas.height;
+        canvas.width = vw;
+        canvas.height = vh;
+
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        ctx.lineWidth = 2;
+        ctx.font = "14px system-ui";
+        ctx.textBaseline = "top";
+
+        for (const d of dets) {
+          const [x, y, w, h] = d.bbox; // already in video pixel space for coco-ssd
+          // Box
+          ctx.strokeStyle = "rgba(0, 255, 0, 1)";
+          ctx.strokeRect(x, y, w, h);
+
+          // Label bg
+          const label = `${d.class} ${(d.score * 100).toFixed(0)}%`;
+          const padX = 6,
+            padY = 2;
+          const metrics = ctx.measureText(label);
+          const textW = metrics.width + padX * 2;
+          const textH = 16 + padY * 2;
+
+          ctx.fillStyle = "rgba(0,0,0,0.7)";
+          ctx.fillRect(x, y - textH < 0 ? y : y - textH, textW, textH);
+
+          // Label text
+          ctx.fillStyle = "#fff";
+          ctx.fillText(label, x + padX, (y - textH < 0 ? y : y - textH) + padY);
+        }
+      }
+
+      // Optional: expose detections via window for debugging/consumption
+      window.getDetectionsJSON = () => {
+        try {
+          return JSON.parse(document.getElementById("out").textContent);
+        } catch {
+          return [];
+        }
+      };
+    </script>
+  </body>
+</html>

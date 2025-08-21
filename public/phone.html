@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Phone Camera (Sender)</title>
+</head>
+<body>
+  <h2>Sender (Webcam)</h2>
+  <video id="preview" autoplay playsinline muted></video>
+
+  <script>
+    const protocol = window.location.protocol === "https:" ? "wss://" : "ws://";
+    const ws = new WebSocket(protocol + window.location.host);
+
+    let pc = new RTCPeerConnection({
+      iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+    });
+
+    // Send ICE candidates
+    pc.onicecandidate = ({ candidate }) => {
+      if (candidate) {
+        console.log("Phone sending ICE", candidate);
+        ws.send(JSON.stringify({ target: "viewer", candidate }));
+      }
+    };
+
+    // Capture webcam
+    navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+      .then(stream => {
+        document.getElementById("preview").srcObject = stream;
+        stream.getTracks().forEach(track => pc.addTrack(track, stream));
+        return pc.createOffer();
+      })
+      .then(offer => {
+        pc.setLocalDescription(offer);
+        ws.send(JSON.stringify({ type: "phone", target: "viewer", offer }));
+      });
+
+    ws.onmessage = async ({ data }) => {
+      const msg = JSON.parse(data);
+      if (msg.answer) {
+        console.log("Phone received answer");
+        await pc.setRemoteDescription(new RTCSessionDescription(msg.answer));
+      }
+      if (msg.candidate) {
+        console.log("Phone adding ICE", msg.candidate);
+        await pc.addIceCandidate(new RTCIceCandidate(msg.candidate));
+      }
+    };
+  </script>
+</body>
+</html>
