@@ -1,4 +1,4 @@
-Overview
+# Overview
 
 This prototype demonstrates a lightweight browser-based video capture and inference overlay system.
 
@@ -10,7 +10,7 @@ Server (optional): Acts as relay (server-mode) or can be bypassed in WASM-only m
 
 This design allows flexible deployment in resource-constrained environments (mobile devices, browsers) without heavy native dependencies.
 
-Design Choices
+# Design Choices
 
 Normalized Coordinates [0–1]
 Bounding box coordinates are normalized, making overlays resolution-agnostic. This ensures consistent rendering across devices with different aspect ratios and resolutions.
@@ -28,10 +28,10 @@ inference_ts (when inference completed, if applicable)
 
 These values allow the browser to align metadata with frames and compute end-to-end latency.
 
-Overlay on Canvas Layer
+# Overlay on Canvas Layer
 Instead of modifying the video directly, bounding boxes are drawn on a <canvas> stacked on top of the <video>. This keeps the video rendering fast while allowing dynamic overlay updates.
 
-Low-Resource Mode
+# Low-Resource Mode
 
 WASM-only mode: Inference runs locally in the browser (WebAssembly). This reduces dependency on a server and avoids network latency, at the cost of higher CPU usage on the device.
 
@@ -39,7 +39,7 @@ Server mode: The phone only sends frames, and inference runs on a more powerful 
 
 The system can switch between these modes based on device capabilities or connectivity.
 
-Backpressure Policy
+# Backpressure Policy
 
 Mobile devices and browsers cannot always sustain full-frame transmission under poor networks. To handle this:
 
