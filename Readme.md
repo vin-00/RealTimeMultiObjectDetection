@@ -1,115 +1,69 @@
-📹 Real-Time Video Capture & Inference Overlay
+# 📹 Real-Time Video Capture & Inference Overlay
 
-This project demonstrates a browser-based real-time video streaming and inference overlay system.
-It supports two modes:
+This project demonstrates a browser-based real-time video streaming and inference overlay system using WebRTC technology.
 
-Server Mode – phone streams frames to a Node.js backend for inference.
+## 🚀 Setup Instructions
 
-WASM Mode – inference runs directly in the browser (WebAssembly).
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/yourname/webRTC.git
+   cd webRTC
+   ```
 
-The viewer overlays bounding boxes (detections) on live video, synchronized by frame_id and timestamps (capture_ts, recv_ts, inference_ts).
+2. **Install dependencies**
+   ```bash
+   npm install
+   ```
 
-🚀 Quick Start
-1. Clone Repo
-git clone https://github.com/yourname/realtime-overlay.git
-cd realtime-overlay
+3. **Start the server**
+   ```bash
+   node server.js
+   ```
 
-2. One-Command Start (with Docker)
-./start.sh server
+4. **Access the application**
+   - On your phone: Open `http://localhost:3000/phone.html` to use the phone camera
+   - On your computer: Open `http://localhost:3000/viewer.html` to see the live feed from the phone with boundaries and predictions
 
+> **Note:** Ensure your phone and computer are on the same network for the connection to work properly.
 
-or
+## 📱 How It Works
 
-./start.sh wasm
+This application uses WebRTC to establish a peer-to-peer connection between your phone and computer:
 
+1. The phone camera captures video frames
+2. The frames are streamed directly to the viewer
+3. The viewer displays the video with overlaid boundaries and predictions
 
-This will:
+## 🔧 Modes
 
-Build & start containers (docker-compose up)
+### Server Mode
 
-Launch server (if in server mode)
+Run `node server.js`
 
-Serve frontend (viewer.html, phone.html)
+- Phone → sends video frames to Node.js server
+- Server → relays the video stream
+- Viewer → overlays results
 
-📱 Joining from Phone
+## 📂 Repo Structure
 
-Ensure your phone and laptop are on the same WiFi/network.
-
-Open the viewer.html on your laptop (e.g., http://localhost:8080/viewer.html).
-
-On the laptop viewer, a QR code / short URL will be displayed.
-
-Scan the QR with your phone → it opens phone.html.
-
-Phone camera starts automatically.
-
-Frames + metadata stream to the server (or directly if in WASM mode).
-
-🔧 Modes
-Server Mode
-
-Run ./start.sh server
-
-Phone → sends video frames to Node.js server
-
-Server → attaches inference_ts after running detection
-
-Viewer → overlays results
-
-WASM Mode
-
-Run ./start.sh wasm
-
-No server needed
-
-Phone/browser runs inference locally (WebAssembly model)
-
-Works fully offline
-
-📂 Repo Structure
+```
 .
-├── server.js           # Node.js WebSocket relay (server mode)
-├── viewer.html         # Viewer (video + overlay)
-├── phone.html          # Phone capture client
-├── Dockerfile          # For frontend/server build
-├── docker-compose.yml  # Compose setup
-├── start.sh            # Convenience start script
-├── README.md           # You are here
-└── report.md           # Design notes, low-resource mode, backpressure
+├── server.js           # Node.js WebSocket relay server
+├── public/             # Frontend files
+│   ├── viewer.html     # Viewer (video + overlay)
+│   └── phone.html      # Phone capture client
+├── package.json        # Project dependencies
+└── README.md           # You are here
+```
 
-📊 Example Metadata
+## ⚡ Features
 
-Each frame sends JSON like:
+- Real-time video streaming from phone to computer
+- Object detection with bounding box overlay
+- Low-latency communication using WebRTC
 
-{
-  "frame_id": "123",
-  "capture_ts": 1690000000000,
-  "recv_ts": 1690000000100,
-  "inference_ts": 1690000000120,
-  "detections": [
-    { "label": "person", "score": 0.93, "xmin": 0.12, "ymin": 0.08, "xmax": 0.34, "ymax": 0.67 }
-  ]
-}
+## ✅ Requirements
 
-
-Coordinates are normalized [0..1]
-
-Browser uses frame_id + capture_ts to align overlays
-
-End-to-end latency = inference_ts - capture_ts
-
-⚡ Backpressure Handling
-
-Frame skipping when network is slow
-
-Adaptive FPS (e.g., 30 → 10fps)
-
-Minimal JSON metadata per frame
-
-✅ Requirements
-
-Docker & docker-compose
-
-Modern browser (Chrome/Edge/Firefox/Safari ≥ 16)
-
-iOS Safari users must enable camera permissions
+- Node.js
+- Modern browser (Chrome/Edge/Firefox/Safari)
+- Phone and computer on the same network
