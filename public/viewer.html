@@ -95,7 +95,6 @@
     <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/coco-ssd@2.2.2/dist/coco-ssd.min.js"></script>
 
     <script>
-      // --- WebSocket signaling (same as before) ---
       const protocol = location.protocol === "https:" ? "wss://" : "ws://";
       const ws = new WebSocket(protocol + location.host);
 
@@ -103,7 +102,6 @@
         iceServers: [{ urls: "stun:stun.l.google.com:19302" }],
       });
 
-      // Make sure receiver expects tracks
       pc.addTransceiver("video", { direction: "recvonly" });
       pc.addTransceiver("audio", { direction: "recvonly" });
 
