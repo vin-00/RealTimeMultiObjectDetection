@@ -29,7 +29,8 @@ inference_ts (when inference completed, if applicable)
 These values allow the browser to align metadata with frames and compute end-to-end latency.
 
 # Overlay on Canvas Layer
-Instead of modifying the video directly, bounding boxes are drawn on a <canvas> stacked on top of the <video>. This keeps the video rendering fast while allowing dynamic overlay updates.
+Instead of modifying the video directly, bounding boxes are drawn on a canvas element stacked on top of the video element. This keeps the video rendering fast while allowing dynamic overlay updates.
+
 
 # Low-Resource Mode
 
