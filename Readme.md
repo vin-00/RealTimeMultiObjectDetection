@@ -24,7 +24,9 @@ This project demonstrates a browser-based real-time video streaming and inferenc
    - On your phone: Open `http://localhost:3000/phone.html` to use the phone camera
    - On your computer: Open `http://localhost:3000/viewer.html` to see the live feed from the phone with boundaries and predictions
 
+
 > **Note:** Ensure your phone and computer are on the same network for the connection to work properly.
+> Also If on the desktop the live feed is not showing , try reloading the page on the phone , to make sure connection gets established between the mobile and the desktop .
 
 ## 📱 How It Works
 
